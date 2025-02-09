@@ -74,13 +74,17 @@ def syn_scan(target, port):
 # Function to scan a given target on specified ports
 def scan_target(target, ports, open_hosts, closed_hosts, filtered_hosts):
     """
-    TODO:
-    - Print the scanning message with the target IP and port range.
-    - Use `is_host_online(target)` to check if the host is reachable.
-    - If the host is online, iterate through the ports and:
-        - Call `syn_scan(target, port)` for each port.
-        - Categorize the result into open, closed, or filtered lists.
+    Scans a target on specified ports and updates the respective lists.
+
+    @param target: Target IP address
+    @param ports: List of ports to scan
+    @param open_hosts: List to store open ports
+    @param closed_hosts: List to store closed ports
+    @param filtered_hosts: List to store filtered ports
+    @return: None
     """
+
+
     print(f"[+] Scanning {target} on ports {ports}...")
 
     if not is_host_online(target):
@@ -100,6 +104,10 @@ def scan_target(target, ports, open_hosts, closed_hosts, filtered_hosts):
 
 
 def parse_subnet_range(ipv4):
+    """
+    Parses an IPv4 address or subnet and returns a list of IP addresses.
+
+    """
     subnet_mask = ipv4.split('/')[1]
     available_addresses = 2**(32 - int(subnet_mask))
     formatted_ip = '.'.join(ipv4.split('.')[0:3])
@@ -109,6 +117,9 @@ def parse_subnet_range(ipv4):
 
 
 def parse_multiple_ip(targets) -> list:
+    """
+    Parses a range of IP addresses and returns a list of IP addresses.
+    """
     ip_addresses = []
     if '-' not in targets:
         return [targets]
@@ -125,6 +136,9 @@ def parse_multiple_ip(targets) -> list:
     return ip_addresses
 
 def parse_ports(ports):
+    """
+    Parses a range of ports and returns a list of ports.
+    """
     p_args = ports.split(",")
     filtered_ports = []
     for port in p_args:
@@ -162,6 +176,8 @@ def parse_arguments():
     parser.add_argument("--show", help="Filter results: open, closed, filtered")
 
     args = parser.parse_args()
+    if args.target == "" and args.ports == "":
+        print("[+] No target and ports specified: Searching local subnet and all ports.")
 
     if not args.target:
         targets = parse_subnet_range(get_local_subnet())
@@ -174,6 +190,7 @@ def parse_arguments():
     print(ports)
 
     show = args.show
+
 
     return targets, ports, show
 
