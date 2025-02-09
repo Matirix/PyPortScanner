@@ -1,0 +1,7 @@
+digraph SYNACKgraph {
+
+    START -> PARSE_ARGS [label="parse_args, parse_ports, parse_ip"]
+    PARSE_ARGS -> SCAN_TARGETS [label="scan_target, syn_scan"]
+    SCAN_TARGETS -> SHOW_SUMMARY [label="show_summary"]
+    SHOW_SUMMARY -> FIN
+}

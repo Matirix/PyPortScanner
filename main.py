@@ -81,7 +81,7 @@ def scan_target(target, ports, open_hosts, closed_hosts, filtered_hosts):
         - Call `syn_scan(target, port)` for each port.
         - Categorize the result into open, closed, or filtered lists.
     """
-    print(f"[+] Scanning {target} on ports {min(ports)}-{max(ports)}...")
+    print(f"[+] Scanning {target} on ports {ports}...")
 
     if not is_host_online(target):
         print(f"[-] {target} is unreachable. Skipping...")
@@ -104,22 +104,55 @@ def parse_subnet_range(ipv4):
     available_addresses = 2**(32 - int(subnet_mask))
     formatted_ip = '.'.join(ipv4.split('.')[0:3])
     start, end = formatted_ip + '.1', formatted_ip + '.' + str(available_addresses  - 1)
-    parse_multiple_ip(start + '-' + end)
+    return parse_multiple_ip(start + '-' + end)
 
 
 
 def parse_multiple_ip(targets) -> list:
     ip_addresses = []
+    if '-' not in targets:
+        return [targets]
     start, end = targets.split('-')
+    if (end == ''):
+        raise ValueError("Missing End Address")
     if (start.count('.') != 3 or end.count('.') != 3):
-        raise ValueError("IP Addresses must have 4 periods to be valid")
+        raise ValueError("IP Addresses must have 3 periods to be valid")
     start_range, end_range = int(start.split('.')[3]), int(end.split('.')[3])
     prefix = '.'.join(start.split('.')[0:3]) + '.'
     for i in range(start_range, end_range + 1):
         ipv4 = prefix + str(i)
         ip_addresses.append(ipv4)
-    print(ip_addresses)
     return ip_addresses
+
+def parse_ports(ports):
+    p_args = ports.split(",")
+    filtered_ports = []
+    for port in p_args:
+        if "-" in port:
+            start, end = port.split("-")
+            for i in range(int(start), int(end)+1):
+                filtered_ports.append(i)
+        else:
+            filtered_ports.append(int(port))
+    return filtered_ports
+
+def show_summary(show: str, open: list, closed: list, filtered:list) -> None:
+    print("\n[+] Scan Summary:")
+    match show:
+        case "open":
+            print(f"  Open Ports: {open_hosts}")
+        case "closed":
+            print(f"  Closed Ports: {closed_hosts}")
+        case "filtered":
+            print(f"  Filtered Ports: {filtered_hosts}")
+        case _:
+            print(f"  Open Ports: {open_hosts}")
+            print(f"  Closed Ports: {closed_hosts}")
+            print(f"  Filtered Ports: {filtered_hosts}")
+
+
+
+
 
 # Function to parse command-line arguments
 def parse_arguments():
@@ -131,16 +164,18 @@ def parse_arguments():
     args = parser.parse_args()
 
     if not args.target:
-        args.target = get_local_subnet()
+        targets = parse_subnet_range(get_local_subnet())
+    else:
+        targets = parse_subnet_range(args.target) if '/' in args.target else parse_multiple_ip(args.target)
+    print(targets)
 
+    # Implement port parsing (supporting single ports, ranges, lists)
+    ports = parse_ports(args.ports) if args.ports else list(range(1,65535+1))
+    print(ports)
 
-    # TODO: Implement target parsing (supporting single IP, range, subnet)
-    targets = parse_multiple_ip(args.target) if '-' in args.target else parse_subnet_range(args.target)
+    show = args.show
 
-    # TODO: Implement port parsing (supporting single ports, ranges, lists)
-    ports = [80, 443]  # Placeholder (only scans 80 and 443)
-
-    return targets, ports
+    return targets, ports, show
 
 if __name__ == "__main__":
     """
@@ -151,18 +186,15 @@ if __name__ == "__main__":
     - Print a final summary of open, closed, and filtered ports.
     """
     # targets = ['127.0.0.1']
-    targets, ports = parse_arguments()
-    ports = [80, 443, 22]
+    targets, ports, show = parse_arguments()
 
-    # open_hosts = []
-    # closed_hosts = []
-    # filtered_hosts = []
+    open_hosts = []
+    closed_hosts = []
+    filtered_hosts = []
 
-    # print("\n[+] Starting scan...")
-    # for target in targets:
-    #     scan_target(target, ports, open_hosts, closed_hosts, filtered_hosts)
 
-    # print("\n[+] Scan Summary:")
-    # print(f"  Open Ports: {open_hosts}")
-    # print(f"  Closed Ports: {closed_hosts}")
-    # print(f"  Filtered Ports: {filtered_hosts}")
+    print("\n[+] Starting scan...")
+    for target in targets:
+        scan_target(target, ports, open_hosts, closed_hosts, filtered_hosts)
+
+    show_summary(show, open_hosts, closed_hosts, filtered_hosts)
