@@ -9,10 +9,12 @@ from scapy.all import *
 from netaddr import IPNetwork, IPRange  # Ensure netaddr is installed
 from tokenize import String
 
-# Function to detect local subnet (if no target is provided)
 def get_local_subnet():
+    """
+    Detects the local subnet by parsing the output of `ifconfig route`.
+    """
     try:
-        result = subprocess.run(["ip", "route"], capture_output=True, text=True)
+        result = subprocess.run(["ifconfig", "route"], capture_output=True, text=True)
 
         for line in result.stdout.split("\n"):
             if "src" in line:
@@ -56,8 +58,7 @@ def syn_scan(target, port):
     ip_layer = IP(dst=target)
     tcp_layer = TCP(dport=port, flags="S")
     packet = ip_layer/tcp_layer
-    syn_ack = sr1(packet)
-    print(syn_ack)
+    syn_ack = sr1(packet, timeout=1, verbose=False)
     if syn_ack:
         if syn_ack.haslayer(TCP):
             if syn_ack.getlayer(TCP).flags == 0x12: # This is 00010010 in binary
@@ -84,8 +85,10 @@ def scan_target(target, ports, open_hosts, closed_hosts, filtered_hosts):
     @return: None
     """
 
-
-    print(f"[+] Scanning {target} on ports {ports}...")
+    if len(ports) < 10:
+        print(f"[+] Scanning {target} on ports {ports}...")
+    else:
+        print(f"[+] Scanning {target} on ports {min(ports)} - {max(ports)}")
 
     if not is_host_online(target):
         print(f"[-] {target} is unreachable. Skipping...")
@@ -106,7 +109,6 @@ def scan_target(target, ports, open_hosts, closed_hosts, filtered_hosts):
 def parse_subnet_range(ipv4):
     """
     Parses an IPv4 address or subnet and returns a list of IP addresses.
-
     """
     subnet_mask = ipv4.split('/')[1]
     available_addresses = 2**(32 - int(subnet_mask))
@@ -115,19 +117,39 @@ def parse_subnet_range(ipv4):
     return parse_multiple_ip(start + '-' + end)
 
 
+def is_valid_ip(targets):
+    """
+    Checks if the target is a valid IPv4 address by checking length of portions and if they are integers.
+    """
+    if '-' not in targets:
+        parts = targets.split('.')
+        if len(parts) != 4 or not all(part.isdigit() for part in parts):
+            return False
+        return True
+    return False
 
-def parse_multiple_ip(targets) -> list:
+def parse_multiple_ip(targets):
     """
     Parses a range of IP addresses and returns a list of IP addresses.
     """
     ip_addresses = []
-    if '-' not in targets:
-        return [targets]
+    if '-' not in targets and ',' not in targets:
+        if not is_valid_ip(targets):
+            print ("IP Addresses must be integers and have 3 periods to be valid")
+            exit()
+        else:
+            return [targets]
+    if ',' in targets:
+        targets = targets.split(',')
+        return targets
+
     start, end = targets.split('-')
     if (end == ''):
-        raise ValueError("Missing End Address")
-    if (start.count('.') != 3 or end.count('.') != 3):
-        raise ValueError("IP Addresses must have 3 periods to be valid")
+        print("Missing End Address")
+        exit()
+    if not is_valid_ip(start) or not is_valid_ip(end):
+        print ("IP Addresses must be integers and have 3 periods to be valid")
+        exit()
     start_range, end_range = int(start.split('.')[3]), int(end.split('.')[3])
     prefix = '.'.join(start.split('.')[0:3]) + '.'
     for i in range(start_range, end_range + 1):
@@ -152,23 +174,25 @@ def parse_ports(ports):
 
 def show_summary(show: str, open: list, closed: list, filtered:list) -> None:
     print("\n[+] Scan Summary:")
-    match show:
-        case "open":
-            print(f"  Open Ports: {open_hosts}")
-        case "closed":
-            print(f"  Closed Ports: {closed_hosts}")
-        case "filtered":
-            print(f"  Filtered Ports: {filtered_hosts}")
-        case _:
-            print(f"  Open Ports: {open_hosts}")
-            print(f"  Closed Ports: {closed_hosts}")
-            print(f"  Filtered Ports: {filtered_hosts}")
+    filters = ["open", "closed", "filtered"]
+    if show != None and "," in show:
+        filters = show.split(",")
+    else:
+        filters = [show]
+    for filter in filters:
+        match filter:
+            case "open":
+                print(f"  Open Ports: {open_hosts}")
+            case "closed":
+                print(f"  Closed Ports: {closed_hosts}")
+            case "filtered":
+                print(f"  Filtered Ports: {filtered_hosts}")
+            case _:
+                print(f"  Open Ports: {open_hosts}")
+                print(f"  Closed Ports: {closed_hosts}")
+                print(f"  Filtered Ports: {filtered_hosts}")
 
 
-
-
-
-# Function to parse command-line arguments
 def parse_arguments():
     parser = argparse.ArgumentParser(description="SYN Scanner Shell for Students")
     parser.add_argument("-t", "--target", help="Target IP, range, or subnet")
@@ -176,6 +200,9 @@ def parse_arguments():
     parser.add_argument("--show", help="Filter results: open, closed, filtered")
 
     args = parser.parse_args()
+    if args.target == None and args.ports == None and args.show == None:
+        parser.print_help()
+        exit()
     if args.target == "" and args.ports == "":
         print("[+] No target and ports specified: Searching local subnet and all ports.")
 
@@ -183,16 +210,14 @@ def parse_arguments():
         targets = parse_subnet_range(get_local_subnet())
     else:
         targets = parse_subnet_range(args.target) if '/' in args.target else parse_multiple_ip(args.target)
-    print(targets)
-
     # Implement port parsing (supporting single ports, ranges, lists)
     ports = parse_ports(args.ports) if args.ports else list(range(1,65535+1))
-    print(ports)
 
     show = args.show
 
 
     return targets, ports, show
+
 
 if __name__ == "__main__":
     """
